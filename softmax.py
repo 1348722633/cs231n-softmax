@@ -1,91 +1,173 @@
+from __future__ import print_function
+import random
 import numpy as np
-from random import shuffle
-from past.builtins import xrange
-import math
-def softmax_loss_naive(W, X, y, reg):
-  """
-  Softmax loss function, naive implementation (with loops)
-
-  Inputs have dimension D, there are C classes, and we operate on minibatches
-  of N examples.
-
-  Inputs:
-  - W: A numpy array of shape (D, C) containing weights.
-  - X: A numpy array of shape (N, D) containing a minibatch of data.
-  - y: A numpy array of shape (N,) containing training labels; y[i] = c means
-    that X[i] has label c, where 0 <= c < C.
-  - reg: (float) regularization strength
-
-  Returns a tuple of:
-  - loss as single float
-  - gradient with respect to weights W; an array of same shape as W
-  """
-  # Initialize the loss and gradient to zero.
-  loss = 0.0
-  dW = np.zeros_like(W)
-
-  #############################################################################
-  # TODO: Compute the softmax loss and its gradient using explicit loops.     #
-  # Store the loss in loss and the gradient in dW. If you are not careful     #
-  # here, it is easy to run into numeric instability. Don't forget the        #
-  # regularization!                                                           #
-  #############################################################################
-  num_train=X.shape[0]
-  num_classes=W.shape[1]
-  for i in range(num_train):
-    scores=X[i].dot(W)
-    exp_scores=np.zeros(scores.shape)
-    row_sum=0
-    for j in range(num_classes):
-      exp_scores[j]=np.exp(scores[j])
-      row_sum=row_sum+exp_scores[j]
-    loss=loss-np.log(exp_scores[y[i]]/row_sum)
-    for k in range(num_classes):
-      if k !=y[i]:
-        dW[:,k] +=exp_scores[k]/row_sum * X[i]
-      else:
-        dW[:,y[i]] +=(exp_scores[y[i]]/row_sum-1)*X[i]
-  loss=loss/num_train
-  loss=loss + reg * np.sum(W*W)
-  dW=dW/num_train
-  dW=dW+ 2 * reg * W
-  #############################################################################
-  #                          END OF YOUR CODE                                 #
-  #############################################################################
-
-  return loss, dW
+from cs231n.data_utils import load_CIFAR10
+import matplotlib.pyplot as plt
 
 
-def softmax_loss_vectorized(W, X, y, reg):
-  """
-  Softmax loss function, vectorized version.
 
-  Inputs and outputs are the same as softmax_loss_naive.
-  """
-  # Initialize the loss and gradient to zero.
-  loss = 0.0
-  dW = np.zeros_like(W)
+plt.rcParams['figure.figsize'] = (10.0, 8.0) # set default size of plots
+plt.rcParams['image.interpolation'] = 'nearest'
+plt.rcParams['image.cmap'] = 'gray'
 
-  #############################################################################
-  # TODO: Compute the softmax loss and its gradient using no explicit loops.  #
-  # Store the loss in loss and the gradient in dW. If you are not careful     #
-  # here, it is easy to run into numeric instability. Don't forget the        #
-  # regularization!                                                           #
-  #############################################################################
-  num_train=X.shape[0]
-  # 计算loss
-  scores=X.dot(W)
-  shift_scores=scores-np.max(scores,axis=1).reshape(-1,1)
-  softmax_output = np.exp(shift_scores) / np.sum(np.exp(shift_scores), axis = 1).reshape((num_train, 1))
-  loss=-np.sum(np.log(softmax_output[range(num_train),list(y)]))
-  loss /=num_train # 平均损失  
-  loss +=0.5 *reg*np.sum(W*W)  # 正则化处理 
-  dS=softmax_output.copy()
-  dS[range(num_train),list(y)]+=-1
-  dW=(X.T).dot(dS)
-  dW=dW / num_train+reg*W
-  #############################################################################
-  #                          END OF YOUR CODE                                 #
-  #############################################################################
-  return loss, dW
+# for auto-reloading extenrnal modules
+# see http://stackoverflow.com/questions/1907993/autoreload-of-modules-in-ipython
+def get_CIFAR10_data(num_training=49000, num_validation=1000, num_test=1000, num_dev=500):
+    """
+    Load the CIFAR-10 dataset from disk and perform preprocessing to prepare
+    it for the linear classifier. These are the same steps as we used for the
+    SVM, but condensed to a single function.
+    """
+    # Load the raw CIFAR-10 data
+    cifar10_dir = 'G:/homework/assignment1/cs231n/datasets/cifar-10-batches-py'
+    X_train, y_train, X_test, y_test = load_CIFAR10(cifar10_dir)
 
+    # subsample the data
+    mask = list(range(num_training, num_training + num_validation))
+    X_val = X_train[mask]
+    y_val = y_train[mask]
+    mask = list(range(num_training))
+    X_train = X_train[mask]
+    y_train = y_train[mask]
+    mask = list(range(num_test))
+    X_test = X_test[mask]
+    y_test = y_test[mask]
+    mask = np.random.choice(num_training, num_dev, replace=False)
+    X_dev = X_train[mask]
+    y_dev = y_train[mask]
+
+    # Preprocessing: reshape the image data into rows
+    X_train = np.reshape(X_train, (X_train.shape[0], -1))
+    X_val = np.reshape(X_val, (X_val.shape[0], -1))
+    X_test = np.reshape(X_test, (X_test.shape[0], -1))
+    X_dev = np.reshape(X_dev, (X_dev.shape[0], -1))
+
+    # Normalize the data: subtract the mean image
+    mean_image = np.mean(X_train, axis=0)
+    X_train -= mean_image
+    X_val -= mean_image
+    X_test -= mean_image
+    X_dev -= mean_image
+
+    # add bias dimension and transform into columns
+    X_train = np.hstack([X_train, np.ones((X_train.shape[0], 1))])
+    X_val = np.hstack([X_val, np.ones((X_val.shape[0], 1))])
+    X_test = np.hstack([X_test, np.ones((X_test.shape[0], 1))])
+    X_dev = np.hstack([X_dev, np.ones((X_dev.shape[0], 1))])
+
+    return X_train, y_train, X_val, y_val, X_test, y_test, X_dev, y_dev
+
+
+# Invoke the above function to get our data.
+X_train, y_train, X_val, y_val, X_test, y_test, X_dev, y_dev = get_CIFAR10_data()
+print('Train data shape: ', X_train.shape)
+print('Train labels shape: ', y_train.shape)
+print('Validation data shape: ', X_val.shape)
+print('Validation labels shape: ', y_val.shape)
+print('Test data shape: ', X_test.shape)
+print('Test labels shape: ', y_test.shape)
+print('dev data shape: ', X_dev.shape)
+print('dev labels shape: ', y_dev.shape)
+# First implement the naive softmax loss function with nested loops.
+# Open the file cs231n/classifiers/softmax.py and implement the
+# softmax_loss_naive function.
+
+from cs231n.classifiers.softmax import softmax_loss_naive
+import time
+
+# Generate a random softmax weight matrix and use it to compute the loss.
+W = np.random.randn(3073, 10) * 0.0001
+loss, grad = softmax_loss_naive(W, X_dev, y_dev, 0.0)
+
+# As a rough sanity check, our loss should be something close to -log(0.1).
+print('loss: %f' % loss)
+print('sanity check: %f' % (-np.log(0.1)))
+# Complete the implementation of softmax_loss_naive and implement a (naive)
+# version of the gradient that uses nested loops.
+loss, grad = softmax_loss_naive(W, X_dev, y_dev, 0.0)
+
+# As we did for the SVM, use numeric gradient checking as a debugging tool.
+# The numeric gradient should be close to the analytic gradient.
+from cs231n.gradient_check import grad_check_sparse
+f = lambda w: softmax_loss_naive(w, X_dev, y_dev, 0.0)[0]
+grad_numerical = grad_check_sparse(f, W, grad, 10)
+
+# similar to SVM case, do another gradient check with regularization
+loss, grad = softmax_loss_naive(W, X_dev, y_dev, 5e1)
+f = lambda w: softmax_loss_naive(w, X_dev, y_dev, 5e1)[0]
+grad_numerical = grad_check_sparse(f, W, grad, 10)
+# Complete the implementation of softmax_loss_naive and implement a (naive)
+# version of the gradient that uses nested loops.
+loss, grad = softmax_loss_naive(W, X_dev, y_dev, 0.0)
+
+# As we did for the SVM, use numeric gradient checking as a debugging tool.
+# The numeric gradient should be close to the analytic gradient.
+from cs231n.gradient_check import grad_check_sparse
+f = lambda w: softmax_loss_naive(w, X_dev, y_dev, 0.0)[0]
+grad_numerical = grad_check_sparse(f, W, grad, 10)
+
+# similar to SVM case, do another gradient check with regularization
+loss, grad = softmax_loss_naive(W, X_dev, y_dev, 5e1)
+f = lambda w: softmax_loss_naive(w, X_dev, y_dev, 5e1)[0]
+grad_numerical = grad_check_sparse(f, W, grad, 10)
+# Use the validation set to tune hyperparameters (regularization strength and
+# learning rate). You should experiment with different ranges for the learning
+# rates and regularization strengths; if you are careful you should be able to
+# get a classification accuracy of over 0.35 on the validation set.
+from cs231n.classifiers import Softmax
+
+results = {}
+best_val = -1
+best_softmax = None
+learning_rates = [1e-7, 5e-7]
+regularization_strengths = [2.5e4, 5e4]
+
+################################################################################
+# TODO:                                                                        #
+# Use the validation set to set the learning rate and regularization strength. #
+# This should be identical to the validation that you did for the SVM; save    #
+# the best trained softmax classifer in best_softmax.                          #
+################################################################################
+params = [(x,y) for x in learning_rates for y in regularization_strengths ]
+for lrate, regular in params:
+    softmax = Softmax()
+    loss_hist = softmax.train(X_train, y_train, learning_rate=lrate, reg=regular,
+                             num_iters=700, verbose=False)
+    y_train_pred = softmax.predict(X_train)
+    accuracy_train = np.mean( y_train == y_train_pred)
+    y_val_pred = softmax.predict(X_val)
+    accuracy_val = np.mean(y_val == y_val_pred)
+    results[(lrate, regular)] = (accuracy_train, accuracy_val)
+    if(best_val < accuracy_val):
+        best_val = accuracy_val
+        best_softmax = softmax
+################################################################################
+#                              END OF YOUR CODE                                #
+################################################################################
+# Print out results.
+for lr, reg in sorted(results):
+    train_accuracy, val_accuracy = results[(lr, reg)]
+    print('lr %e reg %e train accuracy: %f val accuracy: %f' % (
+        lr, reg, train_accuracy, val_accuracy))
+
+print('best validation accuracy achieved during cross-validation: %f' % best_val)
+# evaluate on test set
+# Evaluate the best softmax on test set
+y_test_pred = best_softmax.predict(X_test)
+test_accuracy = np.mean(y_test == y_test_pred)
+print('softmax on raw pixels final test set accuracy: %f' % (test_accuracy, ))
+# Visualize the learned weights for each class
+w = best_softmax.W[:-1, :]  # strip out the bias
+w = w.reshape(32, 32, 3, 10)
+
+w_min, w_max = np.min(w), np.max(w)
+
+classes = ['plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+for i in range(10):
+    plt.subplot(2, 5, i + 1)
+
+    # Rescale the weights to be between 0 and 255
+    wimg = 255.0 * (w[:, :, :, i].squeeze() - w_min) / (w_max - w_min)
+    plt.imshow(wimg.astype('uint8'))
+    plt.axis('off')
+    plt.title(classes[i])
